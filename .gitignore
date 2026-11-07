@@ -1,0 +1,13 @@
+# 构建产物
+SimulationPositioning
+SimulationPositioning.app/
+AppIcon.icns
+AppIcon.iconset/
+AppIcon.png
+
+# 调试/验证脚本
+sample.swift
+sample2.swift
+
+# macOS
+.DS_Store

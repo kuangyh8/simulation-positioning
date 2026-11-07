@@ -1,0 +1,455 @@
+<title>模拟定位</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* 布局概念：macOS 窗口卡片 · 左对齐信息分层（状态→设备→定位→操作）· 靛青渐变做主强调 */
+  :root {
+    --bg: #eceef3;
+    --win-bg: #f6f7fa;
+    --surface: #ffffff;
+    --surface-2: #f0f1f6;
+    --fg: #1d1e26;
+    --muted: #858a99;
+    --border: #e4e6ee;
+    --accent: #6366F1;
+    --accent-2: #22D3EE;
+    --success: #22C55E;
+    --danger: #EF4444;
+    --grad: linear-gradient(135deg, #6366F1 0%, #22D3EE 100%);
+    --map-bg: #e6ebf2;
+    --map-road: #ffffff;
+    --map-park: #c9e6ca;
+    --map-water: #b6d9f2;
+    --shadow: 0 24px 60px -24px rgba(30, 34, 60, 0.35);
+    --card-shadow: 0 1px 2px rgba(30, 34, 60, 0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #191a21;
+      --win-bg: #23242d;
+      --surface: #2b2c37;
+      --surface-2: #30323e;
+      --fg: #eef0f6;
+      --muted: #9aa0ad;
+      --border: #3a3c48;
+      --accent: #818cf8;
+      --accent-2: #67e8f9;
+      --success: #4ade80;
+      --danger: #f87171;
+      --map-bg: #2a2d37;
+      --map-road: #3b3e4a;
+      --map-park: #2e4a33;
+      --map-water: #2a4a5a;
+      --shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.6);
+      --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #191a21;
+    --win-bg: #23242d;
+    --surface: #2b2c37;
+    --surface-2: #30323e;
+    --fg: #eef0f6;
+    --muted: #9aa0ad;
+    --border: #3a3c48;
+    --accent: #818cf8;
+    --accent-2: #67e8f9;
+    --success: #4ade80;
+    --danger: #f87171;
+    --map-bg: #2a2d37;
+    --map-road: #3b3e4a;
+    --map-park: #2e4a33;
+    --map-water: #2a4a5a;
+    --shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.6);
+    --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", "Segoe UI", sans-serif;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+  }
+
+  /* 页面级顶栏 */
+  .pagebar {
+    width: min(640px, 100%);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .pagebar .tag {
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .theme-toggle {
+    font: inherit;
+    font-size: 12px;
+    color: var(--fg);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 12px;
+    cursor: pointer;
+    box-shadow: var(--card-shadow);
+  }
+  .theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* 窗口 */
+  .window {
+    width: min(640px, 100%);
+    background: var(--win-bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .titlebar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+  }
+  .tl { width: 12px; height: 12px; border-radius: 50%; }
+  .tl.r { background: #ff5f57; } .tl.y { background: #febc2e; } .tl.g { background: #28c840; }
+  .titlebar .win-title {
+    margin: 0 auto;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .win-body {
+    padding: 18px 18px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  /* 头部：品牌 + 状态胶囊 */
+  .head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .brand-icon {
+    width: 42px; height: 42px;
+    border-radius: 11px;
+    background: var(--grad);
+    display: grid; place-items: center;
+    flex: none;
+    box-shadow: 0 6px 16px -6px rgba(99, 102, 241, 0.6);
+  }
+  .brand-icon svg { width: 24px; height: 24px; }
+  .brand-text { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+  .brand-name { font-size: 16px; font-weight: 700; }
+  .brand-sub { font-size: 12px; color: var(--muted); }
+  .pill {
+    margin-left: auto;
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 12.5px; font-weight: 600;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 12px;
+    white-space: nowrap;
+    flex: none;
+  }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .pill.is-active { color: var(--success); border-color: color-mix(in srgb, var(--success) 45%, transparent); background: color-mix(in srgb, var(--success) 12%, transparent); }
+  .pill.is-active .dot { background: var(--success); box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 40%, transparent); animation: pulse 1.8s infinite; }
+
+  /* 卡片 */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--card-shadow);
+    padding: 12px 14px;
+  }
+  .device-row { display: flex; align-items: center; gap: 10px; }
+  .device-row .k { font-size: 12px; color: var(--muted); }
+  .device-row .v { font-size: 13px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .connected { color: var(--success); }
+  .btn-ghost {
+    margin-left: auto;
+    font: inherit; font-size: 12.5px; font-weight: 600;
+    color: var(--fg); background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 12px; cursor: pointer; flex: none;
+  }
+  .btn-ghost:hover { background: var(--border); }
+
+  /* 搜索 */
+  .search-row { display: flex; gap: 8px; }
+  .search-box {
+    flex: 1; display: flex; align-items: center; gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0 12px;
+    min-width: 0;
+  }
+  .search-box svg { width: 16px; height: 16px; color: var(--muted); flex: none; }
+  .search-box input {
+    flex: 1; border: 0; outline: 0; background: transparent;
+    font: inherit; font-size: 13.5px; color: var(--fg);
+    padding: 9px 0; min-width: 0;
+  }
+  .search-box input::placeholder { color: var(--muted); }
+  .btn-accent {
+    font: inherit; font-size: 13.5px; font-weight: 600;
+    color: #fff; background: var(--accent);
+    border: 0; border-radius: 10px; padding: 0 16px; cursor: pointer;
+  }
+  .btn-accent:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
+
+  /* 地图 */
+  .map { position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
+  .map svg { display: block; width: 100%; height: 168px; }
+  .map-tag {
+    position: absolute; top: 10px; right: 10px;
+    font-size: 11px; font-weight: 600; color: var(--muted);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 999px; padding: 4px 9px;
+  }
+  .pulse { transform-origin: center; }
+  .map.is-set .pulse { animation: ring 2s ease-out infinite; }
+
+  /* 坐标 */
+  .coord-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .field {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 0 12px; flex: 1; min-width: 130px;
+  }
+  .field .lbl { font-size: 12px; color: var(--muted); flex: none; }
+  .field input {
+    flex: 1; border: 0; outline: 0; background: transparent;
+    font: inherit; font-size: 13.5px; color: var(--fg);
+    padding: 9px 0; min-width: 0; font-variant-numeric: tabular-nums;
+  }
+  .btn-copy {
+    font: inherit; font-size: 12.5px; font-weight: 600;
+    color: var(--fg); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; cursor: pointer;
+  }
+  .btn-copy:hover { background: var(--surface-2); }
+
+  /* 常用位置 */
+  .favs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .favs .lbl { font-size: 12px; color: var(--muted); flex: none; }
+  .chip {
+    font: inherit; font-size: 12.5px; font-weight: 500;
+    color: var(--fg); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 999px; padding: 6px 13px; cursor: pointer;
+  }
+  .chip:hover { border-color: var(--accent); }
+  .chip.selected {
+    color: #fff; border-color: transparent; background: var(--grad); font-weight: 600;
+  }
+  .chip.add { color: var(--accent); border-style: dashed; }
+
+  /* 操作按钮 */
+  .actions { display: flex; gap: 10px; }
+  .btn-primary {
+    flex: 1; font: inherit; font-size: 14px; font-weight: 700;
+    color: #fff; background: var(--grad);
+    border: 0; border-radius: 11px; padding: 12px 0; cursor: pointer;
+    box-shadow: 0 10px 22px -10px rgba(99, 102, 241, 0.7);
+    transition: transform .08s ease, box-shadow .2s ease;
+  }
+  .btn-primary:hover { filter: brightness(1.04); }
+  .btn-primary:active { transform: scale(.985); }
+  .btn-primary.danger { background: var(--danger); box-shadow: 0 10px 22px -10px rgba(239, 68, 68, 0.7); }
+  .btn-secondary {
+    font: inherit; font-size: 14px; font-weight: 600;
+    color: var(--fg); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 11px; padding: 12px 18px; cursor: pointer;
+  }
+  .btn-secondary:hover { background: var(--surface-2); }
+
+  /* 状态行 */
+  .status-line { font-size: 12px; color: var(--muted); text-align: center; }
+  .status-line.on { color: var(--success); }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%) translateY(20px);
+    background: var(--fg); color: var(--bg);
+    font-size: 13px; font-weight: 600; padding: 9px 16px; border-radius: 10px;
+    opacity: 0; pointer-events: none; transition: all .25s ease;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  @keyframes ring {
+    0% { r: 24; opacity: .7; }
+    100% { r: 52; opacity: 0; }
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 40%, transparent); }
+    70% { box-shadow: 0 0 0 7px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pill.is-active .dot, .map.is-set .pulse { animation: none; }
+  }
+</style>
+
+<div class="pagebar">
+  <span class="tag">Simulation Positioning · 界面预览</span>
+  <button class="theme-toggle" id="themeToggle">切换深色</button>
+</div>
+
+<div class="window">
+  <div class="titlebar">
+    <span class="tl r"></span><span class="tl y"></span><span class="tl g"></span>
+    <span class="win-title">模拟定位</span>
+  </div>
+
+  <div class="win-body">
+    <div class="head">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 24 12 24s12-15 12-24C24 5.4 18.6 0 12 0z" fill="#fff"/><circle cx="12" cy="11" r="4.4" fill="#6366F1"/></svg>
+      </div>
+      <div class="brand-text">
+        <span class="brand-name">模拟定位</span>
+        <span class="brand-sub">Simulation Positioning</span>
+      </div>
+      <span class="pill" id="statusPill"><span class="dot"></span><span id="statusPillText">未连接</span></span>
+    </div>
+
+    <div class="card device-row">
+      <span class="k">设备</span>
+      <span class="v connected" id="deviceName">iPhone 15 Pro · 已连接</span>
+      <button class="btn-ghost" type="button">刷新</button>
+    </div>
+
+    <div class="search-row">
+      <div class="search-box">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" placeholder="搜索地点，如：北京天安门 或 上海外滩">
+      </div>
+      <button class="btn-accent" type="button">搜索</button>
+    </div>
+
+    <div class="map" id="map">
+      <svg viewBox="0 0 600 170" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <rect width="600" height="170" fill="var(--map-bg)"/>
+        <path d="M0 170 L0 138 Q70 126 140 136 T300 140 L300 170 Z" fill="var(--map-water)"/>
+        <rect x="436" y="16" width="150" height="74" rx="14" fill="var(--map-park)"/>
+        <g stroke="var(--map-road)" stroke-linecap="round" fill="none">
+          <line x1="0" y1="62" x2="600" y2="62" stroke-width="11"/>
+          <line x1="118" y1="0" x2="118" y2="170" stroke-width="8"/>
+          <line x1="322" y1="62" x2="322" y2="170" stroke-width="8"/>
+          <line x1="0" y1="122" x2="322" y2="122" stroke-width="8"/>
+          <line x1="424" y1="0" x2="424" y2="170" stroke-width="8"/>
+        </g>
+        <defs>
+          <linearGradient id="pinGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#6366F1"/><stop offset="1" stop-color="#22D3EE"/>
+          </linearGradient>
+        </defs>
+        <circle class="pulse" cx="300" cy="88" r="24" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+        <g transform="translate(300 88) scale(2.5) translate(-12 -10)">
+          <path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 24 12 24s12-15 12-24C24 5.4 18.6 0 12 0z" fill="url(#pinGrad)"/>
+          <circle cx="12" cy="11" r="4.2" fill="#fff"/>
+        </g>
+      </svg>
+      <span class="map-tag">地图预览 · 占位示意</span>
+    </div>
+
+    <div class="coord-row">
+      <div class="field"><span class="lbl">纬度</span><input id="lat" type="text" value="39.9042"></div>
+      <div class="field"><span class="lbl">经度</span><input id="lon" type="text" value="116.4074"></div>
+      <button class="btn-copy" id="copyBtn" type="button">复制</button>
+    </div>
+
+    <div class="favs">
+      <span class="lbl">常用位置</span>
+      <button class="chip selected" data-city="北京" type="button">北京</button>
+      <button class="chip" data-city="上海" type="button">上海</button>
+      <button class="chip" data-city="纽约" type="button">纽约</button>
+      <button class="chip" data-city="东京" type="button">东京</button>
+      <button class="chip add" type="button">＋ 收藏当前</button>
+    </div>
+
+    <div class="actions">
+      <button class="btn-primary" id="toggleBtn" type="button">▶ 开始模拟</button>
+      <button class="btn-secondary" type="button">重置位置</button>
+    </div>
+
+    <div class="status-line" id="statusLine">未检测到 iPhone（插入 USB → 信任 → 开启开发者模式）</div>
+  </div>
+</div>
+
+<div class="toast" id="toast">已复制坐标</div>
+
+<script>
+  var btn = document.getElementById('toggleBtn');
+  var pill = document.getElementById('statusPill');
+  var pillText = document.getElementById('statusPillText');
+  var statusLine = document.getElementById('statusLine');
+  var map = document.getElementById('map');
+  var lat = document.getElementById('lat');
+  var lon = document.getElementById('lon');
+  var active = false;
+
+  var COORDS = { '北京': [39.9042, 116.4074], '上海': [31.2304, 121.4737], '纽约': [40.7128, -74.0060], '东京': [35.6762, 139.6503] };
+
+  function setActive(on) {
+    active = on;
+    btn.classList.toggle('danger', on);
+    btn.textContent = on ? '■ 停止模拟' : '▶ 开始模拟';
+    pill.classList.toggle('is-active', on);
+    pillText.textContent = on ? '正在模拟' : '未连接';
+    map.classList.toggle('is-set', on);
+    statusLine.classList.toggle('on', on);
+    statusLine.textContent = on ? '已开启 · 每 5 秒保持 · 退出自动恢复真实定位' : '未检测到 iPhone（插入 USB → 信任 → 开启开发者模式）';
+  }
+  btn.addEventListener('click', function () { setActive(!active); });
+
+  var chips = document.querySelectorAll('.chip[data-city]');
+  chips.forEach(function (c) {
+    c.addEventListener('click', function () {
+      chips.forEach(function (x) { x.classList.remove('selected'); });
+      c.classList.add('selected');
+      var v = COORDS[c.dataset.city] || [0, 0];
+      lat.value = v[0]; lon.value = v[1];
+      map.classList.add('is-set');
+    });
+  });
+
+  var toast = document.getElementById('toast');
+  var copyBtn = document.getElementById('copyBtn');
+  copyBtn.addEventListener('click', function () {
+    var text = lat.value + ', ' + lon.value;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(function () {});
+    }
+    toast.classList.add('show');
+    setTimeout(function () { toast.classList.remove('show'); }, 1400);
+  });
+
+  var themeToggle = document.getElementById('themeToggle');
+  themeToggle.addEventListener('click', function () {
+    var cur = document.documentElement.getAttribute('data-theme');
+    var next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    themeToggle.textContent = next === 'dark' ? '切换浅色' : '切换深色';
+  });
+</script>
